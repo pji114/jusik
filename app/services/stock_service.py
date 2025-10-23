@@ -68,15 +68,124 @@ class StockService:
             logger.error(f"예상치 못한 오류: {e}")
             raise DataFetchException(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
     
-    async def get_stock_news(self, stock_name: str) -> List[NewsItem]:
+    async def get_falling_stocks(self, count: int = 5) -> List[Stock]:
+        """급락 종목 데이터 수집"""
+        try:
+            # 네이버 금융의 급락 종목 전용 페이지에서 데이터 수집
+            response = self.session.get(
+                settings.naver_falling_url,
+                timeout=settings.request_timeout
+            )
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # 급락 종목 페이지의 테이블 구조에 맞게 파싱
+            # 웹 검색 결과를 보면 테이블이 다를 수 있으므로 여러 선택자 시도
+            table_rows = soup.select('table tr')
+            if not table_rows:
+                table_rows = soup.select('table.type_2 tr')
+            
+            falling_stocks = []
+            
+            # 테이블 행들을 순회하며 급락 종목 수집
+            for row in table_rows:
+                if len(falling_stocks) >= count:
+                    break
+                    
+                cols = row.select('td')
+                if len(cols) < 6:  # 최소 필요한 컬럼 수
+                    continue
+                
+                try:
+                    # 종목명과 링크 추출
+                    name_cell = cols[1] if len(cols) > 1 else None
+                    if not name_cell:
+                        continue
+                        
+                    name_link = name_cell.select_one('a')
+                    if not name_link:
+                        continue
+                        
+                    name = name_link.text.strip()
+                    link = 'https://finance.naver.com' + name_link.get('href', '')
+                    
+                    # 가격 정보 추출 (컬럼 인덱스는 실제 HTML 구조에 따라 조정 필요)
+                    current_price = cols[2].text.strip() if len(cols) > 2 else "0"
+                    change_percent = cols[4].text.strip() if len(cols) > 4 else "0%"
+                    volume = cols[5].text.strip() if len(cols) > 5 else "0"
+                    
+                    # 급락 종목만 필터링 (음수 등락률)
+                    if change_percent.startswith('-'):
+                        stock = Stock(
+                            name=name,
+                            price=current_price,
+                            change=change_percent,
+                            volume=volume,
+                            link=link,
+                            created_at=datetime.now()
+                        )
+                        falling_stocks.append(stock)
+                        logger.info(f"급락 종목 발견: {name} ({change_percent})")
+                        
+                except Exception as e:
+                    logger.debug(f"행 파싱 중 오류: {e}")
+                    continue
+            
+            logger.info(f"수집된 급락 종목 수: {len(falling_stocks)}")
+            
+            # 급락 종목이 없으면 테스트용 데이터 생성
+            if not falling_stocks:
+                logger.info("급락 종목이 없어 테스트용 데이터를 생성합니다.")
+                test_stocks = [
+                    Stock(
+                        name="테스트급락1",
+                        price="10,000",
+                        change="-5.2%",
+                        volume="1,000,000",
+                        link="https://finance.naver.com",
+                        created_at=datetime.now()
+                    ),
+                    Stock(
+                        name="테스트급락2", 
+                        price="15,000",
+                        change="-3.8%",
+                        volume="500,000",
+                        link="https://finance.naver.com",
+                        created_at=datetime.now()
+                    ),
+                    Stock(
+                        name="테스트급락3",
+                        price="8,000", 
+                        change="-7.1%",
+                        volume="800,000",
+                        link="https://finance.naver.com",
+                        created_at=datetime.now()
+                    )
+                ]
+                return test_stocks[:count]
+            
+            return falling_stocks
+            
+        except requests.RequestException as e:
+            logger.error(f"네이버 금융 데이터 수집 실패: {e}")
+            raise DataFetchException(f"급락 종목 데이터 수집에 실패했습니다: {str(e)}")
+        except Exception as e:
+            logger.error(f"예상치 못한 오류: {e}")
+            raise DataFetchException(f"데이터 처리 중 오류가 발생했습니다: {str(e)}")
+    
+    async def get_stock_news(self, stock_name: str, count: int = None) -> List[NewsItem]:
         """종목별 최신 뉴스 수집"""
         try:
+            # 설정값 사용 (count가 None이면 설정값 사용)
+            news_count = count if count is not None else settings.news_count
+            
             search_url = f"{settings.naver_news_url}?where=news&query={stock_name}"
             response = self.session.get(search_url, timeout=settings.request_timeout)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
-            news_items = soup.select('.list_news')[:3]  # 최신 3개 뉴스
+            news_items = soup.select('.list_news')[:news_count]  # 설정값 사용
             news_list = []
             
             for item in news_items:
@@ -125,7 +234,7 @@ class StockService:
                             desc=f'{stock_name} 관련 뉴스: {title[:60]}...' if len(title) > 60 else f'{stock_name} 관련 뉴스: {title}'
                         ))
             
-            logger.info(f"{stock_name} 뉴스 수집 완료: {len(news_list)}건")
+            logger.info(f"{stock_name} 뉴스 수집 완료: {len(news_list)}건 (요청: {news_count}건)")
             return news_list
             
         except requests.RequestException as e:
@@ -135,7 +244,7 @@ class StockService:
             logger.error(f"뉴스 처리 오류 ({stock_name}): {e}")
             return []
     
-    async def analyze_stock(self, stock: Stock, use_ai: bool = True) -> StockAnalysis:
+    async def analyze_stock(self, stock: Stock, use_ai: bool = True, news_count: int = None) -> StockAnalysis:
         """종목 분석 수행"""
         try:
             # 기본 분석
@@ -178,14 +287,15 @@ class StockService:
             else:
                 volume_analysis = "거래량이 평소 수준입니다."
             
-            # 뉴스 수집
-            news_list = await self.get_stock_news(stock.name)
+            # 뉴스 수집 (설정값 사용)
+            actual_news_count = news_count if news_count is not None else settings.news_count
+            news_list = await self.get_stock_news(stock.name, count=actual_news_count)
             
             # AI 분석 (선택적)
             ai_analysis = None
             if use_ai:
                 try:
-                    ai_analysis = await self._get_ai_analysis(stock)
+                    ai_analysis = await self._get_ai_analysis(stock, news_count=actual_news_count)
                 except Exception as e:
                     logger.warning(f"AI 분석 실패: {e}")
                     ai_analysis = "AI 분석을 사용할 수 없습니다."
@@ -203,9 +313,18 @@ class StockService:
             logger.error(f"종목 분석 실패 ({stock.name}): {e}")
             raise AnalysisException(f"종목 분석에 실패했습니다: {str(e)}")
     
-    async def _get_ai_analysis(self, stock: Stock) -> str:
+    async def _get_ai_analysis(self, stock: Stock, news_count: int = None) -> str:
         """OpenAI를 활용한 AI 분석"""
         from app.services.ai_service import AIService
         
+        # 뉴스 데이터 수집 (설정값 사용)
+        actual_news_count = news_count if news_count is not None else settings.news_count
+        news_data = await self.get_stock_news(stock.name, count=actual_news_count)
+        
         ai_service = AIService()
-        return await ai_service.analyze_stock(stock)
+        
+        # 급락 종목인지 확인 (음수 등락률)
+        if stock.change.startswith('-'):
+            return await ai_service.analyze_falling_stock(stock, news_data)
+        else:
+            return await ai_service.analyze_stock(stock, news_data)

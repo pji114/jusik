@@ -181,6 +181,12 @@ curl "http://localhost:8000/api/v1/reports/html?count=3&use_ai=true&save_file=tr
 
 # HTML 보고서를 report 폴더에 저장
 curl -X POST "http://localhost:8000/api/v1/reports/save?count=3&use_ai=true"
+
+# 티스토리 금등 종목 블로깅용 HTML Report 폴더에 저장
+curl -X POST "http://localhost:8000/api/v1/reports/tistory/save?count=5&use_ai=true"
+
+## 티스토리 급락 종목 불로깅용 HTML Report 폴더에 저장
+curl -X GET "http://localhost:8000/api/v1/reports/falling/tistory?count=5&use_ai=false"
 ```
 
 ## 🛠️ 개발

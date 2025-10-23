@@ -119,6 +119,216 @@ async def save_html_report(
         raise create_http_exception(e)
 
 
+@router.get("/tistory", response_class=HTMLResponse)
+async def generate_tistory_html_report(
+    count: int = Query(5, ge=1, le=20, description="분석할 종목 수"),
+    use_ai: bool = Query(True, description="AI 분석 사용 여부"),
+    save_file: bool = Query(False, description="파일로 저장할지 여부"),
+    stock_service: StockService = Depends(),
+    report_service: ReportService = Depends()
+):
+    """
+    티스토리 블로그용 HTML 보고서 생성
+    
+    - **count**: 분석할 종목 수 (1-20개)
+    - **use_ai**: AI 분석 사용 여부
+    - **save_file**: report 폴더에 파일로 저장할지 여부
+    """
+    try:
+        # 급등 종목 조회
+        stocks = await stock_service.get_rising_stocks(count=count)
+        
+        if not stocks:
+            raise HTTPException(
+                status_code=404,
+                detail="급등 종목 데이터를 찾을 수 없습니다."
+            )
+        
+        # 각 종목에 대한 분석 수행
+        analyses = []
+        for stock in stocks:
+            analysis = await stock_service.analyze_stock(stock, use_ai=use_ai)
+            analyses.append(analysis)
+        
+        # 티스토리용 HTML 보고서 생성
+        html_content = await report_service.generate_tistory_html(
+            stocks=stocks,
+            analyses=analyses,
+            use_ai=use_ai
+        )
+        
+        # 파일로 저장 (save_file=True인 경우)
+        if save_file:
+            filename = await report_service.save_tistory_html_report(html_content, use_ai)
+            logger.info(f"티스토리 HTML 보고서가 저장되었습니다: {filename}")
+        
+        return HTMLResponse(content=html_content)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"티스토리 HTML 보고서 생성 실패: {e}")
+        raise create_http_exception(e)
+
+
+@router.post("/tistory/save")
+async def save_tistory_html_report(
+    count: int = Query(5, ge=1, le=20, description="분석할 종목 수"),
+    use_ai: bool = Query(True, description="AI 분석 사용 여부"),
+    stock_service: StockService = Depends(),
+    report_service: ReportService = Depends()
+):
+    """
+    티스토리용 HTML 보고서를 report 폴더에 저장
+    
+    - **count**: 분석할 종목 수 (1-20개)
+    - **use_ai**: AI 분석 사용 여부
+    """
+    try:
+        # 급등 종목 조회
+        stocks = await stock_service.get_rising_stocks(count=count)
+        
+        if not stocks:
+            raise HTTPException(
+                status_code=404,
+                detail="급등 종목 데이터를 찾을 수 없습니다."
+            )
+        
+        # 각 종목에 대한 분석 수행
+        analyses = []
+        for stock in stocks:
+            analysis = await stock_service.analyze_stock(stock, use_ai=use_ai)
+            analyses.append(analysis)
+        
+        # 티스토리용 HTML 보고서 생성
+        html_content = await report_service.generate_tistory_html(
+            stocks=stocks,
+            analyses=analyses,
+            use_ai=use_ai
+        )
+        
+        # 파일로 저장
+        filename = await report_service.save_tistory_html_report(html_content, use_ai)
+        
+        return {
+            "message": "티스토리 HTML 보고서가 성공적으로 저장되었습니다.",
+            "filename": filename,
+            "filepath": f"report/{os.path.basename(filename)}",
+            "generated_at": datetime.now()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"티스토리 HTML 보고서 저장 실패: {e}")
+        raise create_http_exception(e)
+
+
+@router.get("/falling/tistory", response_class=HTMLResponse)
+async def generate_falling_tistory_html_report(
+    count: int = Query(5, ge=1, le=20, description="분석할 종목 수"),
+    use_ai: bool = Query(True, description="AI 분석 사용 여부"),
+    save_file: bool = Query(False, description="파일로 저장할지 여부"),
+    stock_service: StockService = Depends(),
+    report_service: ReportService = Depends()
+):
+    """
+    급락 종목용 티스토리 블로그 HTML 보고서 생성
+    
+    - **count**: 분석할 종목 수 (1-20개)
+    - **use_ai**: AI 분석 사용 여부
+    - **save_file**: report 폴더에 파일로 저장할지 여부
+    """
+    try:
+        # 급락 종목 조회
+        stocks = await stock_service.get_falling_stocks(count=count)
+        
+        if not stocks:
+            raise HTTPException(
+                status_code=404,
+                detail="급락 종목 데이터를 찾을 수 없습니다."
+            )
+        
+        # 각 종목에 대한 분석 수행
+        analyses = []
+        for stock in stocks:
+            analysis = await stock_service.analyze_stock(stock, use_ai=use_ai, news_count=count)
+            analyses.append(analysis)
+        
+        # 급락 종목용 티스토리 HTML 보고서 생성
+        html_content = await report_service.generate_falling_tistory_html(
+            stocks=stocks,
+            analyses=analyses,
+            use_ai=use_ai
+        )
+        
+        # 파일로 저장 (save_file=True인 경우)
+        if save_file:
+            filename = await report_service.save_falling_tistory_html_report(html_content, use_ai)
+            logger.info(f"급락 종목 티스토리 HTML 보고서가 저장되었습니다: {filename}")
+        
+        return HTMLResponse(content=html_content)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"급락 종목 티스토리 HTML 보고서 생성 실패: {e}")
+        raise create_http_exception(e)
+
+
+@router.post("/falling/tistory/save")
+async def save_falling_tistory_html_report(
+    count: int = Query(5, ge=1, le=20, description="분석할 종목 수"),
+    use_ai: bool = Query(True, description="AI 분석 사용 여부"),
+    stock_service: StockService = Depends(),
+    report_service: ReportService = Depends()
+):
+    """
+    급락 종목용 티스토리 HTML 보고서를 report 폴더에 저장
+    
+    - **count**: 분석할 종목 수 (1-20개)
+    - **use_ai**: AI 분석 사용 여부
+    """
+    try:
+        # 급락 종목 조회
+        stocks = await stock_service.get_falling_stocks(count=count)
+        
+        if not stocks:
+            raise HTTPException(
+                status_code=404,
+                detail="급락 종목 데이터를 찾을 수 없습니다."
+            )
+        
+        # 각 종목에 대한 분석 수행
+        analyses = []
+        for stock in stocks:
+            analysis = await stock_service.analyze_stock(stock, use_ai=use_ai, news_count=count)
+            analyses.append(analysis)
+        
+        # 급락 종목용 티스토리 HTML 보고서 생성
+        html_content = await report_service.generate_falling_tistory_html(
+            stocks=stocks,
+            analyses=analyses,
+            use_ai=use_ai
+        )
+        
+        # 파일로 저장
+        filename = await report_service.save_falling_tistory_html_report(html_content, use_ai)
+        
+        return {
+            "message": "급락 종목 티스토리 HTML 보고서가 성공적으로 저장되었습니다.",
+            "filename": filename,
+            "filepath": f"report/{os.path.basename(filename)}",
+            "generated_at": datetime.now()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"급락 종목 티스토리 HTML 보고서 저장 실패: {e}")
+        raise create_http_exception(e)
+
+
 @router.get("/summary")
 async def get_market_summary(
     count: int = Query(5, ge=1, le=20, description="분석할 종목 수"),

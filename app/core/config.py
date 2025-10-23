@@ -11,14 +11,22 @@ class Settings(BaseSettings):
     
     # OpenAI 설정 - 환경변수에서 직접 읽기
     openai_api_key: Optional[str] = None
+    open_ai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
+    openai_max_tokens: int = 1000
+    openai_temperature: float = 0.3
     
     # 네이버 금융 설정
     naver_finance_url: str = "https://finance.naver.com/sise/sise_rise.naver"
+    naver_falling_url: str = "https://finance.naver.com/sise/sise_fall.naver"
     naver_news_url: str = "https://search.naver.com/search.naver"
     
     # 요청 설정
     request_timeout: int = 30
     max_retries: int = 3
+    
+    # 뉴스 분석 설정
+    news_count: int = 10
     
     class Config:
         env_file = ".env"
@@ -29,7 +37,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # OpenAI API 키 설정 - 환경변수에서 직접 읽기
-openai_key = os.getenv('OPEN_AI_API_KEY') or settings.openai_api_key
+openai_key = os.getenv('OPEN_AI_API_KEY')
 if openai_key:
     os.environ["OPENAI_API_KEY"] = openai_key
     print(f"DEBUG: OpenAI API 키 설정됨: {openai_key[:20]}...")
