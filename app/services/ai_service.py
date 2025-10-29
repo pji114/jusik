@@ -256,3 +256,223 @@ class AIService:
             """)
         
         return "\n".join(formatted_data)
+    
+    async def generate_tech_blog(self, tech_name: str, tech_type: str = "general", 
+                               tech2_name: str = None, blog_type: str = "single") -> str:
+        """
+        IT 기술 블로그 생성
+        
+        Args:
+            tech_name: 기술명
+            tech_type: 기술 유형 (general, cloud, frontend, backend, database, algorithm, etc.)
+            tech2_name: 비교할 두 번째 기술명 (비교 블로그용)
+            blog_type: 블로그 유형 (single, comparison, algorithm)
+        
+        Returns:
+            HTML 형태의 기술 블로그
+        """
+        try:
+            if blog_type == "comparison" and tech2_name:
+                return await self._generate_comparison_blog(tech_name, tech2_name, tech_type)
+            elif blog_type == "algorithm":
+                return await self._generate_algorithm_blog(tech_name, tech_type)
+            else:
+                return await self._generate_single_tech_blog(tech_name, tech_type)
+                
+        except Exception as e:
+            logger.error(f"기술 블로그 생성 실패 ({tech_name}): {e}")
+            raise OpenAIException(f"기술 블로그 생성에 실패했습니다: {str(e)}")
+    
+    async def _generate_single_tech_blog(self, tech_name: str, tech_type: str) -> str:
+        """단일 기술 블로그 생성"""
+        system_prompt = f"""당신은 IT 기술 전문가입니다. 
+        {tech_type} 분야의 전문가로서 기술에 대해 정확하고 이해하기 쉽게 설명합니다.
+        
+        블로그 작성 시 다음 사항을 고려하세요:
+        1. 기술적 정확성과 최신 정보 반영
+        2. 초보자도 이해할 수 있는 설명
+        3. 실제 사용 사례와 예시 제공 - 반드시 구체적이고 상세하게 설명
+        4. 코드 예시가 있다면 포함
+        5. HTML 형식으로 구조화된 응답
+        6. 티스토리 블로그에 최적화된 스타일
+        7. 최종 응답에 메타 설명이나 블로그 작성 가이드 같은 부가 설명은 절대 포함하지 말 것
+        8. 특징과 실제 사용 예시는 특히 상세하게 작성할 것"""
+        
+        user_prompt = f"""
+        '{tech_name}' 기술에 대해 다음 구조로 블로그를 작성해주세요:
+        
+        <h2>1. 기술의 정의</h2>
+        <p>{tech_name}이 무엇인지 명확하고 간결하게 정의해주세요.</p>
+        
+        <h2>2. 기술의 탄생배경</h2>
+        <p>이 기술이 왜 만들어졌는지, 어떤 문제를 해결하려고 하는지 설명해주세요.</p>
+        
+        <h2>3. 기술의 특징</h2>
+        <p>이 기술의 주요 특징을 <strong>상세하게</strong> 설명해주세요. 최소 3-4개의 핵심 특징을 각각 설명하고, 장단점을 명확히 제시해주세요. 각 특징마다 왜 중요한지, 어떤 장점을 제공하는지 구체적으로 설명해주세요.</p>
+        
+        <h2>4. 실제 사용 예시</h2>
+        <p>실제로 어떻게 사용되는지 <strong>구체적이고 상세한</strong> 예시를 들어 설명해주세요. 실제 회사나 서비스에서 어떻게 활용되는지, 어떤 상황에서 사용하는지, 사용 시 어떤 효과를 얻을 수 있는지 등을 포함해서 설명해주세요.</p>
+        
+        <h2>5. 코드 예시</h2>
+        <p>코드로 표현이 가능하다면 실제 사용 예시 코드를 보여주세요.</p>
+        
+        <strong>중요:</strong> 마지막에 블로그 작성 가이드나 기술적 설명(예: "이 블로그는 HTML 태그로 구조화되어 있습니다") 같은 메타 설명은 절대 포함하지 마세요. 순수한 기술 내용만 제공해주세요.
+        
+        각 섹션은 HTML 태그를 사용하여 구조화하고, 한국어로 전문적이고 이해하기 쉽게 작성해주세요.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=settings.openai_temperature,
+                max_tokens=settings.openai_max_tokens
+            )
+            
+            content = response.choices[0].message.content
+            logger.info(f"단일 기술 블로그 생성 완료: {tech_name}")
+            return content
+            
+        except Exception as e:
+            logger.error(f"단일 기술 블로그 생성 실패 ({tech_name}): {e}")
+            raise OpenAIException(f"기술 블로그 생성에 실패했습니다: {str(e)}")
+    
+    async def _generate_comparison_blog(self, tech1_name: str, tech2_name: str, tech_type: str) -> str:
+        """기술 비교 블로그 생성"""
+        system_prompt = f"""당신은 IT 기술 전문가입니다. 
+        {tech_type} 분야의 전문가로서 두 기술을 객관적이고 정확하게 비교 분석합니다.
+        
+        비교 분석 시 다음 사항을 고려하세요:
+        1. 객관적이고 공정한 비교
+        2. 각 기술의 장단점 명확히 제시
+        3. 실제 사용 사례와 예시 제공
+        4. HTML 테이블을 활용한 비교 도표
+        5. HTML 형식으로 구조화된 응답
+        6. 티스토리 블로그에 최적화된 스타일"""
+        
+        user_prompt = f"""
+        '{tech1_name}'와 '{tech2_name}' 기술을 비교하여 다음 구조로 블로그를 작성해주세요:
+        
+        <h2>1. 각 기술에 대한 정의</h2>
+        <h3>{tech1_name}</h3>
+        <p>{tech1_name}이 무엇인지 정의해주세요.</p>
+        
+        <h3>{tech2_name}</h3>
+        <p>{tech2_name}이 무엇인지 정의해주세요.</p>
+        
+        <h2>2. 각 기술의 특징</h2>
+        <h3>{tech1_name}의 특징</h3>
+        <p>{tech1_name}의 주요 특징을 설명해주세요.</p>
+        
+        <h3>{tech2_name}의 특징</h3>
+        <p>{tech2_name}의 주요 특징을 설명해주세요.</p>
+        
+        <h2>3. 기술 비교 도표</h2>
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+        <thead>
+        <tr>
+        <th style="padding: 10px; background-color: #f0f0f0;">비교 항목</th>
+        <th style="padding: 10px; background-color: #f0f0f0;">{tech1_name}</th>
+        <th style="padding: 10px; background-color: #f0f0f0;">{tech2_name}</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr><td style="padding: 10px;">성능</td><td style="padding: 10px;"></td><td style="padding: 10px;"></td></tr>
+        <tr><td style="padding: 10px;">사용 편의성</td><td style="padding: 10px;"></td><td style="padding: 10px;"></td></tr>
+        <tr><td style="padding: 10px;">확장성</td><td style="padding: 10px;"></td><td style="padding: 10px;"></td></tr>
+        <tr><td style="padding: 10px;">비용</td><td style="padding: 10px;"></td><td style="padding: 10px;"></td></tr>
+        <tr><td style="padding: 10px;">학습 곡선</td><td style="padding: 10px;"></td><td style="padding: 10px;"></td></tr>
+        </tbody>
+        </table>
+        
+        <h2>4. 각 기술의 사용 예시</h2>
+        <h3>{tech1_name} 사용 예시</h3>
+        <p>{tech1_name}이 언제, 어떻게 사용되는지 구체적인 예시를 들어 설명해주세요.</p>
+        
+        <h3>{tech2_name} 사용 예시</h3>
+        <p>{tech2_name}이 언제, 어떻게 사용되는지 구체적인 예시를 들어 설명해주세요.</p>
+        
+        각 섹션은 HTML 태그를 사용하여 구조화하고, 한국어로 전문적이고 이해하기 쉽게 작성해주세요.
+        티스토리 블로그에 최적화된 인라인 스타일을 사용해주세요.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=settings.openai_temperature,
+                max_tokens=settings.openai_max_tokens
+            )
+            
+            content = response.choices[0].message.content
+            logger.info(f"기술 비교 블로그 생성 완료: {tech1_name} vs {tech2_name}")
+            return content
+            
+        except Exception as e:
+            logger.error(f"기술 비교 블로그 생성 실패 ({tech1_name} vs {tech2_name}): {e}")
+            raise OpenAIException(f"기술 비교 블로그 생성에 실패했습니다: {str(e)}")
+    
+    async def _generate_algorithm_blog(self, algorithm_name: str, algorithm_type: str) -> str:
+        """알고리즘/자료구조/디자인 패턴 블로그 생성"""
+        system_prompt = f"""당신은 컴퓨터 과학 전문가입니다. 
+        알고리즘, 자료구조, 디자인 패턴 분야의 전문가로서 기술적 내용을 정확하고 이해하기 쉽게 설명합니다.
+        
+        블로그 작성 시 다음 사항을 고려하세요:
+        1. 기술적 정확성과 이론적 배경 설명
+        2. 단계별 설명과 시각적 이해 도움
+        3. Java 코드 예시 제공
+        4. 시간복잡도와 공간복잡도 분석
+        5. HTML 형식으로 구조화된 응답
+        6. 티스토리 블로그에 최적화된 스타일"""
+        
+        user_prompt = f"""
+        '{algorithm_name}'에 대해 다음 구조로 블로그를 작성해주세요:
+        
+        <h2>1. 알고리즘의 정의</h2>
+        <p>{algorithm_name}이 무엇인지 명확하고 간결하게 정의해주세요.</p>
+        
+        <h2>2. 알고리즘의 특징</h2>
+        <p>이 알고리즘의 주요 특징, 장단점, 시간복잡도와 공간복잡도를 설명해주세요.</p>
+        
+        <h2>3. 알고리즘 동작 원리</h2>
+        <p>알고리즘이 어떻게 동작하는지 단계별로 설명해주세요.</p>
+        
+        <h2>4. Java 코드 예제</h2>
+        <pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto;">
+        <code>
+        // Java 코드 예제를 여기에 작성해주세요
+        </code>
+        </pre>
+        
+        <h2>5. 실제 사용 예시</h2>
+        <p>이 알고리즘이 실제로 어떤 상황에서 사용되는지 구체적인 예시를 들어 설명해주세요.</p>
+        
+        각 섹션은 HTML 태그를 사용하여 구조화하고, 한국어로 전문적이고 이해하기 쉽게 작성해주세요.
+        티스토리 블로그에 최적화된 인라인 스타일을 사용해주세요.
+        코드 블록은 적절한 스타일링을 적용해주세요.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=settings.openai_temperature,
+                max_tokens=settings.openai_max_tokens
+            )
+            
+            content = response.choices[0].message.content
+            logger.info(f"알고리즘 블로그 생성 완료: {algorithm_name}")
+            return content
+            
+        except Exception as e:
+            logger.error(f"알고리즘 블로그 생성 실패 ({algorithm_name}): {e}")
+            raise OpenAIException(f"알고리즘 블로그 생성에 실패했습니다: {str(e)}")
