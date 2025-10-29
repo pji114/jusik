@@ -28,6 +28,22 @@ class Settings(BaseSettings):
     # 뉴스 분석 설정
     news_count: int = 10
     
+    # LangChain 설정
+    langchain_enabled: bool = True
+    vectorstore_persist_directory: str = "./chroma_db"
+    embedding_model: str = "text-embedding-ada-002"
+    max_chunk_size: int = 1000
+    chunk_overlap: int = 200
+    
+    # 에이전트 설정
+    agent_verbose: bool = True
+    agent_max_iterations: int = 10
+    agent_timeout: int = 300
+    
+    # RAG 설정
+    rag_search_kwargs: dict = {"k": 3}
+    rag_chain_type: str = "stuff"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
